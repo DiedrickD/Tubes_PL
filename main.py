@@ -128,7 +128,7 @@ class StuntingPredictionApp:
             confidence = np.max(prediction_probabilities)
 
             # Show result in a custom pop-up window
-            self.show_custom_popup(status, confidence, age, height)
+            self.show_custom_popup(status, confidence, age, height, gender_numeric)
 
             # Update status bar
             self.status_var.set(f"Prediksi: {status} dengan keyakinan {confidence * 99.9:.1f}%")
@@ -136,7 +136,7 @@ class StuntingPredictionApp:
         except ValueError:
             self.show_error_popup("Silakan masukkan data dengan benar!")
 
-    def show_custom_popup(self, status, confidence, age, height):
+    def show_custom_popup(self, status, confidence, age, height, gender_numeric):
         # Create a new window (popup)
         popup = tk.Toplevel(self.root)
         popup.title("Hasil Penilaian")
@@ -177,42 +177,55 @@ class StuntingPredictionApp:
         tips_text.pack(pady=10)
 
         # Plot prediction graph
-        self.plot_prediction_graph(age, height, status, popup)
+        self.plot_prediction_graph(age, height, status, popup, gender_numeric)
 
         # Close button
         close_button = ttk.Button(popup, text="Tutup", command=popup.destroy)
         close_button.pack(pady=20)
 
-    def plot_prediction_graph(self, age, height, status, popup):
-        from stunting_dict import nutrition_data
+    def plot_prediction_graph(self, age, height, status, popup, gender_numeric):
+        import pandas as pd
         import matplotlib.pyplot as plt
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
         import tkinter as tk
 
-        # Extract data from the dictionary
-        ages = list(nutrition_data.keys())
-        categories = list(nutrition_data[0].keys())
+        # Determine dataset and title based on gender
+        if gender_numeric == 0:
+            dataset_path = 'boys_combined_cleaned.csv'
+            title = 'Z-score Trendline for Boys'
+        else:
+            dataset_path = 'girls_combined_cleaned.csv'
+            title = 'Z-score Trendline for Girls'
 
-        # Prepare a dictionary to store the average values per category
-        average_values = {category: [] for category in categories}
+        # Load the dataset
+        try:
+            df = pd.read_csv(dataset_path)
+        except FileNotFoundError:
+            print(f"Error: {dataset_path} not found.")
+            return
 
-        # Calculate the average for each category over all ages
-        for age in ages:
-            for category in categories:
-                lower, upper = nutrition_data[age][category]
-                average = (lower + upper) / 2
-                average_values[category].append(average)
+        # Create the trendline plot
+        fig, ax = plt.subplots(figsize=(6, 4))  # Smaller figure size for Tkinter
 
-        # Create a smaller plot
-        fig, ax = plt.subplots(figsize=(6, 4))  # Smaller figure size
-        for category, values in average_values.items():
-            ax.plot(ages, values, label=category)
+        predicted_month = age  # Assuming 'age' represents the predicted month
+        df_filtered = df[(df['Month'] >= predicted_month) & (df['Month'] <= predicted_month + 10)]
 
-        # Add labels, title, legend, and grid
+        # Plot the filtered data
+        ax.plot(df_filtered['Month'], df_filtered['SD3neg'], label='-3 SD', color='red', linewidth=2)
+        ax.plot(df_filtered['Month'], df_filtered['SD2neg'], label='-2 SD', color='orange', linewidth=2)
+        ax.plot(df_filtered['Month'], df_filtered['SD1neg'], label='-1 SD', color='yellow', linewidth=2)
+        ax.plot(df_filtered['Month'], df_filtered['SD0'], label='Median', color='green', linewidth=2)
+        ax.plot(df_filtered['Month'], df_filtered['SD1'], label='+1 SD', color='yellow', linewidth=2)
+        ax.plot(df_filtered['Month'], df_filtered['SD2'], label='+2 SD', color='orange', linewidth=2)
+        ax.plot(df_filtered['Month'], df_filtered['SD3'], label='+3 SD', color='red', linewidth=2)
+
+        plt.scatter(age, height, color='blue', zorder=5, label=f"Prediksi: {status}")
+
+        # Customize the plot
         ax.set_xlabel('Age (months)', fontsize=10)
-        ax.set_ylabel('Average Nutrition Value', fontsize=10)
-        ax.set_title('Chart grafik stunting', fontsize=12)
-        ax.legend(title='Categories', fontsize=8)
+        ax.set_ylabel('Z-score', fontsize=10)
+        ax.set_title(title, fontsize=12)
+        ax.legend(title='SD Categories', fontsize=8)
         ax.grid(True, linestyle='--', alpha=0.7)
 
         # Adjust layout tightly
